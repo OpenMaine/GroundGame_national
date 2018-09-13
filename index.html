@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<title>GroundGame.org - Candidate List</title>
+
+	<style>
+		body { font-family: sans-serif; }
+		table { border-collapse: collapse; width: 1200px;}
+		th 		{ text-align: left; font-size: 13px; }
+		td 		{ border: solid 1px #ccc; padding: 5px; font-size: 12px; line-height: 18px}
+		tr:hover a { color: white; }
+		tbody tr:hover { background: #333; color: white; } 	
+		tr th:hover { cursor: pointer; text-decoration: underline;  }	
+		input { display: inline-block; width: 250px; height: 40px; line-height: 40px; font-size: 16px; border: solid 1px #ccc; margin: 20px 0; padding: 0 8px;}
+	</style>
+
+
+	<!-- JS LIBRARIES: jQuery -->
+	<script src="https://code.jquery.com/jquery-3.2.1.min.js"></script>
+	<script src="jquery.csv.min.js"></script>
+
+	<script>
+
+		var config = {
+			"S_fields" : ["State","Party","Status","Committee Name","City","Received","Spent"],
+
+			"H_fields" : ["State","Party", "District", "Status","Committee Name","City","Received","Spent"],
+
+			"active_house" : "S",
+
+			"search" : {
+				"txt" : '',
+				'state' : '',
+				'house' : 'S',
+				'district' : ''
+			}
+		}
+
+		var orders = {};
+
+		config.H_fields.forEach(function(f){ orders[f] = 1; })
+
+
+	
+		changeHouse = function(){
+			config.active_house = $('#search_house').val();
+
+			if(config.active_house == 'H') $('#search_district').show();
+			else $('#search_district').val('').hide();
+
+			fetchCandidates();
+		}
+
+		loadTable = function(){
+			
+			var fields = config[config.active_house + '_fields'];
+
+			var table_headers = '';
+			fields.forEach(function(f){ table_headers += '<th onclick="sortBy(\'' + f + '\')">' + f + '</th>'; });
+			$('#table_headers').html(table_headers);
+
+
+			var table_body = '';
+			candidates.forEach(function(candidate){
+				if(candidate.display){
+					table_body += '<tr>';
+					fields.forEach(function(f){ 
+
+						var v = (f == 'Received' || f == 'Spent') ? parseFloat(candidate[f]).formatMoney() : candidate[f];
+
+						if(f == 'Committee Name') v = '<a href="cfr.php?id=' + candidate.CMTE_ID + '" target="_blank">' + candidate[f] + '</a>';
+
+						table_body += '<td>' + v + '</td>'; 
+					});
+					table_body += '</tr>';	
+				}
+			});	
+			$('#table_body').html(table_body);
+		}
+
+
+		// SORT TABLE
+		function sortBy(field){
+
+			if(field == 'Date') field = "timestamp";
+
+			if(orders[field] == 1){
+				candidates.sort(function(a, b){ return a[field] < b[field]; });				
+			}
+			else {
+				candidates.sort(function(a, b){ return a[field] > b[field]; });
+			}
+			orders[field] = -1 * orders[field];
+			loadTable();
+		}
+
+
+		// FILTER TABLE BY SEARCH STRING
+		function filter(search_str){
+
+			var search_str = $('#search_txt').val();
+			var state_str = $('#search_state').val();
+			var district_num = $('#search_district').val();
+
+			candidates.forEach(function(c){
+
+				var meets_state_search = true;
+				var meets_txt_search = true;
+				var meets_district_search = true;
+
+				if(state_str != ''){
+					 if(c.State.toLowerCase().indexOf(state_str.toLowerCase()) == -1) meets_state_search = false;
+				}
+				
+				if(district_num != ''){
+					if(c.District != parseInt(district_num)) meets_district_search = false;
+				}
+
+				if(search_str){
+					var fields = ["Committee Name", "Candidate Name"];
+					fields.forEach(function(f){
+						if(c[f].toLowerCase().indexOf(search_str.toLowerCase()) == -1) meets_txt_search = false;
+					})
+				}
+				c.display = (meets_state_search && meets_txt_search && meets_district_search);
+
+			})
+			loadTable();
+		}
+
+
+		// FORMAT MONEY
+		Number.prototype.formatMoney = function(){
+		    var n = this, 
+		    c = 0, 
+		    d = ".", 
+		    t = ",", 
+		    s = n < 0 ? "-$" : "$", 
+		    i = String(parseInt(n = Math.abs(Number(n) || 0).toFixed(c))), 
+		    j = (j = i.length) > 3 ? j % 3 : 0;
+		   return s + (j ? i.substr(0, j) + t : "") + i.substr(j).replace(/(\d{3})(?=\d)/g, "$1" + t) + (c ? d + Math.abs(n - i).toFixed(c).slice(2) : "");
+		 };
+
+		 function fetchCandidates(){
+		 	$.get('candidates/' + config.active_house + '.csv', function(response){
+				candidates = $.csv.toObjects(response);
+				candidates.forEach(function(c){
+					c.Received = parseFloat(c.Received);
+					c.Spent = parseFloat(c.Spent);
+					c.District = parseInt(c.District)
+				})
+				filter('');
+			})
+		 }
+
+
+		$(function(){
+			fetchCandidates();
+
+			for(var k in config.search){
+				$('#search_' + k).val(config.search[k]);
+			}
+		});
+		
+	</script>
+</head>
+<body>
+	
+	<select id="search_house" onchange="changeHouse()">
+		<option value="S" selected="selected">Senate</option>
+		<option value="H">House</option>
+		
+	</select>
+
+	<input placeholder="State" onkeyup="filter(this.value)" style="width: 60px" id="search_state">
+
+	<input placeholder="D #" onkeyup="filter(this.value)" style="width: 60px; display: none" id="search_district">
+
+	<input placeholder="Search..." onkeyup="filter(this.value)" id="search_txt">
+
+	<table>
+		<thead id="table_headers"></thead>
+		<tbody id="table_body"></tbody>
+	</table>
+	
+</body>
+</html>
