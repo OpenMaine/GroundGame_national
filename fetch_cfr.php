@@ -2,7 +2,10 @@
 
 	set_time_limit(0);
 //	header('Content-Type: text/plain');
-	error_reporting(E_ALL);
+	
+	//error_reporting(E_ALL);
+
+
 	ini_set("display_errors", 1);
 
 	// echo "\nSchedule A records describe itemized receipts reported by a committee. This is where\nyou can look for individual contributors. If you are interested in\nindividual donors, `/schedules/schedule_a` will be the endpoint you use.\n\nOnce a person gives more than a total of $200, the donations of that person must be\nreported by committees that file F3, F3X and F3P forms.\n\nContributions $200 and under are not required to be itemized, but you can find the total\namount of these small donations by looking up the \"unitemized\" field in the `/reports`\nor `/totals` endpoints.\n\nWhen comparing the totals from reports to line items. the totals will not match unless you\nonly look at items where `\"is_individual\":true` since the same transaction is in the data\nmultiple ways to explain the way it may move though different committees as an earmark.\nSee the `is_individual` sql function within the migrations for more details.\n\nFor the Schedule A aggregates, such as by_occupation and by_state, include only unique individual\ncontributions. See below for full methodology.\n\n__Methodology for determining unique, individual contributions__\n\nFor receipts over $200 use FEC code line_number to identify individuals.\n\nThe line numbers that specify individuals that are automatically included:\n\nLine number with description\n    - 10 Contribution to Independent Expenditure-Only Committees (Super PACs),\n         Political Committees with non-contribution accounts (Hybrid PACs)\n         and nonfederal party \"soft money\" accounts (1991-2002)\n         from a person (individual, partnership, limited liability company,\n         corporation, labor organization, or any other organization or\n         group of persons)\n    - 15 Contribution to political committees (other than Super PACs\n         and Hybrid PACs) from an individual, partnership or\n         limited liability company\n    - 15E Earmarked contributions to political committees\n          (other than Super PACs and Hybrid PACs) from an individual,\n          partnership or limited liability company\n    - 15J Memo - Recipient committee's percentage of contribution\n          from an individual, partnership or limited liability\n          company given to joint fundraising committee\n    - 18J | Memo - Recipient committee's percentage of contribution\n          from a registered committee given to joint fundraising committee\n    - 30, 30T, 31, 31T, 32 Individual party codes\n\nFor receipts under $200:\nWe check the following codes and see if there is \"earmark\" (or a variation) in the `memo_text`\ndescription of the contribution.\n\nLine number with description\n    -11AI The itemized individual contributions from F3 schedule A\n    -12 Nonfederal other receipt - Levin Account (Line 2)\n    -17 Itemized individual contributions from Form 3P\n    -17A Itemized individual contributions from Form 3P\n    -18 Itemized individual contributions from Form 3P\n\nOf those transactions,[under $200, and having \"earmark\" in the memo text OR transactions having the codes 11A, 12, 17, 17A, or 18], we then want to exclude earmarks.\n\n\nAll receipt data is divided in two-year periods, called `two_year_transaction_period`, which\nis derived from the `report_year` submitted of the corresponding form. If no value is supplied, the results\nwill default to the most recent two-year period that is named after the ending,\neven-numbered year.\n\nDue to the large quantity of Schedule A filings, this endpoint is not paginated by\npage number. Instead, you can request the next page of results by adding the values in\nthe `last_indexes` object from `pagination` to the URL of your last request. For\nexample, when sorting by `contribution_receipt_date`, you might receive a page of\nresults with the following pagination information:\n\n```\npagination: {\n    pages: 2152643,\n    per_page: 20,\n    count: 43052850,\n    last_indexes: {\n        last_index: \"230880619\",\n        last_contribution_receipt_date: \"2014-01-01\"\n    }\n}\n```\n\nTo fetch the next page of sorted results, append `last_index=230880619` and\n`last_contribution_receipt_date=2014-01-01` to the URL.  We strongly advise paging through\nthese results by using sort indices (defaults to sort by contribution date), otherwise some resources may be\nunintentionally filtered out.  This resource uses keyset pagination to improve query performance and these indices\nare required to properly page through this large dataset.\n\nNote: because the Schedule A data includes many records, counts for\nlarge result sets are approximate; you will want to page through the records until no records are returned.\n";
@@ -18,6 +21,26 @@
 
 	function fetch_cfr($committee_id){
 
+
+		// GET PERSON - NO SQL LOOKUP
+		$committees = array();
+		$csv = file_get_contents("candidates" . DIRECTORY_SEPARATOR . "H.csv");
+		$house = readFileAsCSV($csv);
+		foreach ($house as $candidate) $committees[$candidate['CMTE_ID']] = $candidate;
+
+		$csv = file_get_contents("candidates" . DIRECTORY_SEPARATOR . "S.csv");
+		$house = readFileAsCSV($csv);
+		foreach ($house as $candidate) $committees[$candidate['CMTE_ID']] = $candidate;
+
+		if(isset($committees[$committee_id])) $committee = $committees[$committee_id];
+		else {
+			echo "candidate not found";
+			exit();
+		}
+
+
+
+		// GET TRANSACTIONS - FROM FILE OR DOWNLOAD
 		$filePath = "data" . DIRECTORY_SEPARATOR . $committee_id . ".csv";
 
 		if(!file_exists($filePath)) download_cfr($committee_id);
@@ -38,7 +61,10 @@
 		}
 
 
-		return $transactions;
+		return array(
+			"transactions" => $transactions,
+			"committee" => $committee
+		);
 
 	}
 

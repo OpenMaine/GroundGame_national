@@ -1,10 +1,15 @@
 <?php
 
+	// some weird things with imported data
+	error_reporting(E_ERROR | E_PARSE);
+
+
+
 	if(!isset($_GET['id'])) exit("Please provide a federal committee id.");
 	$committee_id = $_GET['id'];
 
 	include('fetch_cfr.php');
-	$transactions = fetch_cfr($committee_id);
+	extract(fetch_cfr($committee_id));
 
 
 	$headers = array('Date', 'Total', 'First Name', 'Last Name', 'Employer', 'Occupation', 'City', 'State', 'Street');
@@ -39,7 +44,7 @@
 	<meta charset="UTF-8">
 	<title>Contributions to <?php echo $committee_id; ?></title>
 	<style>
-		body { font-family: sans-serif; }
+		body { font-family: sans-serif; margin: 30px;}
 		table { border-collapse: collapse; width: 1200px;}
 		th 		{ text-align: left; font-size: 13px; }
 		td 		{ border: solid 1px #ccc; padding: 5px; font-size: 12px; line-height: 18px}
@@ -119,6 +124,14 @@
 
 </head>
 <body>
+
+	<div id="committee" style="font-size: 12px; line-height: 18px;">
+		<b style="font-size: 18px;"><?php echo $committee['Candidate Name']; ?></b>
+		<br /><?php echo substr($committee['Party'], 0, 1); ?> - <?php echo $committee['Status']; ?>
+		<br /><?php echo $committee['Committee Name']; ?> - <?php echo $committee['City']; ?>, <?php echo $committee['State']; ?>
+		<br />Received: $<?php echo number_format($committee['Received']); ?>
+		<br />Spent: $<?php echo number_format($committee['Spent']); ?>
+	</div>
 
 	<input placeholder="Search..." onkeyup="filter(this.value)">
 
